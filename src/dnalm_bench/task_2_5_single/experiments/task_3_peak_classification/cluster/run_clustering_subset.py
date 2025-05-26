@@ -36,10 +36,6 @@ scores_cint = np.max([np.abs(scores_mean - np.quantile(scores, 0.025)), np.abs(s
 print(scores_mean, scores_cint)
 
 # print("Visualizing")
-<<<<<<< HEAD
-cluster_objs[0].plot_embeddings(UMAP(), f"{out_dir}/cluster_plot.png", categories)
-=======
 cluster_objs[0].plot_embeddings(UMAP(), f"{out_dir}cluster_plot.png", categories)
->>>>>>> upstream/main
 
 

@@ -173,7 +173,6 @@ class CaduceusEmbeddingExtractor(HFEmbeddingExtractor, PairedControlEmbeddingExt
     def _offsets_to_indices(offsets, seqs):
         slice_idx = [0, seqs.shape[1]]
         
-<<<<<<< HEAD
         return np.array(slice_idx)
     
 
@@ -242,6 +241,4 @@ class Evo2EmbeddingExtractor(EmbeddingExtractor, PairedControlEmbeddingExtractor
     def _offsets_to_indices(offsets, seqs):
         slice_idx = [0, seqs.shape[1]]
         
-=======
->>>>>>> upstream/main
         return np.array(slice_idx)

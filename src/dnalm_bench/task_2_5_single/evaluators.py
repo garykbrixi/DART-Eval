@@ -9,11 +9,8 @@ from scipy.spatial import distance
 from tqdm import tqdm
 from ..utils import NoModule, onehot_to_chars
 import polars as pl
-<<<<<<< HEAD
-from .....models import load_model
+from models import load_model
 from .....scoring import score_sequences, logits_to_logprobs, prepare_batch
-=======
->>>>>>> upstream/main
 
 class LikelihoodEvaluator(metaclass=ABCMeta):
     def __init__(self, tokenizer, model, batch_size, num_workers, device):
@@ -490,7 +487,6 @@ class NTEvaluator(LikelihoodEvaluator, MaskedZeroShotScore):
     @property
     def end_token(self):
         return None
-<<<<<<< HEAD
     
 
 class EvoEvaluator(LikelihoodEvaluator, CausalZeroShotScore):
@@ -593,8 +589,6 @@ class EvoEvaluator(LikelihoodEvaluator, CausalZeroShotScore):
 #             for lhood in lls.flatten():
 #                 out_file_obj.write(f"{str(lhood)}\n")
 #                 out_file_obj.flush()
-=======
->>>>>>> upstream/main
 
     
 class DNABERT2VariantEvaluator(VariantLikelihoodEvaluator):
@@ -1118,7 +1112,6 @@ class CaduceusVariantEmbeddingEvaluator(VariantEmbeddingEvaluator):
     
     @property
     def end_token(self):
-<<<<<<< HEAD
         return 1
 
 class EvoVariantEmbeddingEvaluator(VariantEmbeddingEvaluator):
@@ -1190,6 +1183,3 @@ class EvoVariantEmbeddingEvaluator(VariantEmbeddingEvaluator):
         finally:
             # Always remove the hook
             handle.remove()
-=======
-        return 1
->>>>>>> upstream/main

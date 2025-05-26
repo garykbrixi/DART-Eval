@@ -255,7 +255,6 @@ class HyenaDNAUntrainedEmbeddingExtractor(HFEmbeddingExtractor, SimpleEmbeddingE
         return np.array(slice_idx)
 
 
-<<<<<<< HEAD
 class Evo2EmbeddingExtractor(EmbeddingExtractor, SimpleEmbeddingExtractor):
     _idx_mode = "fixed"
 
@@ -382,8 +381,6 @@ class Evo2VariantEmbeddingExtractor(EmbeddingExtractor, HFVariantEmbeddingExtrac
         return np.array(slice_idx)
 
 
-=======
->>>>>>> upstream/main
 class DNABERT2VariantEmbeddingExtractor(HFVariantEmbeddingExtractor):
     def __init__(self, model_name, batch_size, num_workers, device):
         model_name = f"zhihan1996/{model_name}"

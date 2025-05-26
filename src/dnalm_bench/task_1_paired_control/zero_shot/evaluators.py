@@ -12,8 +12,6 @@ from tqdm import tqdm
 
 from ..components import PairedControlDataset
 from ...utils import onehot_to_chars, NoModule
-from ......models import load_model
-from ......scoring import score_sequences, logits_to_logprobs, prepare_batch
 
 class MaskedZeroShotScore(metaclass=ABCMeta):
     @property

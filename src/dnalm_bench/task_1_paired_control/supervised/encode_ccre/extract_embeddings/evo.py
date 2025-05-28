@@ -7,12 +7,12 @@ work_dir = os.environ.get("DART_WORK_DIR", "")
 
 if __name__ == "__main__":
     # models.py was updated
-    model_name = "evo2_cascade_1p5_7b_458k"
-    layer_name = "35.norm"
+    model_name = "evo2_7b_base"
+    layer_name = "blocks.28.mlp.l3"
     genome_fa = os.path.join(work_dir, "refs/GRCh38_no_alt_analysis_set_GCA_000001405.15.fasta")
     elements_tsv = os.path.join(work_dir, "task_1_ccre/processed_inputs/ENCFF420VPZ_processed.tsv")
     chroms = None
-    batch_size = 96
+    batch_size = 64
     num_workers = 0
     seed = 0
     device = "cuda:0"

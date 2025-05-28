@@ -6,8 +6,8 @@ from ....components import SimpleSequence
 root_output_dir = os.environ.get("DART_WORK_DIR", "")
 
 if __name__ == "__main__":
-    model_name = "evo2_cascade_1p5_7b_458k"
-    layer_name = "35.norm"
+    model_name = "evo2_7b_base"
+    layer_name = "blocks.28.mlp.l3"
     genome_fa = os.path.join(root_output_dir, f"refs/GRCh38_no_alt_analysis_set_GCA_000001405.15.fasta")
     cell_line = sys.argv[1] #cell line name
     category = sys.argv[2] #peaks, nonpeaks, or idr
@@ -17,7 +17,7 @@ if __name__ == "__main__":
         elements_tsv = os.path.join(root_output_dir, f"task_4_chromatin_activity/processed_data/cell_line_expanded_peaks/{cell_line}_{category}.bed")
     # chroms = ["chr22"]
     chroms = None
-    batch_size = 64
+    batch_size = 32
     num_workers = 0
     seed = 0
     device = "cuda"

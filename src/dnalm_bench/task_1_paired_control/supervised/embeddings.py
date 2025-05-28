@@ -13,7 +13,6 @@ import h5py
 from ..components import PairedControlDataset
 from ...utils import onehot_to_chars
 from ...embeddings import HFEmbeddingExtractor, SequenceBaselineEmbeddingExtractor, EmbeddingExtractor
-from ......models import load_model
 
 class PairedControlEmbeddingExtractor:
     _idx_mode = "variable"
@@ -180,15 +179,12 @@ class Evo2EmbeddingExtractor(EmbeddingExtractor, PairedControlEmbeddingExtractor
     _idx_mode = "fixed"
 
     def __init__(self, model_name, layer_name, batch_size, num_workers, device):
-        evo_model = load_model(
-            model_name,
-            device=device,
-            )
+        from evo2 import Evo2
+        evo_model = Evo2(model_name)
+
         model, tokenizer = evo_model.model, evo_model.tokenizer
         self.tokenizer = tokenizer
-        self.model = model
-        self.model.to(device)
-        model.eval()
+        self.model = evo_model
 
         self.layer_name = layer_name
 
@@ -216,26 +212,9 @@ class Evo2EmbeddingExtractor(EmbeddingExtractor, PairedControlEmbeddingExtractor
         # List to hold the extracted embeddings
         embedding_output = []
 
-        def get_embedding_output(module, input, output):
-            embedding_output.append(output)
-
-        # Register the forward hook for the specified layer
-        layer_to_hook = self.model.get_submodule(self.layer_name)
-
-        with layer_to_hook.register_forward_hook(get_embedding_output) as handle:
-            # Pass through the model without computing gradients
-            with torch.no_grad():
-                self.model(tokens)
-
-        # Check if embeddings were captured
-        if embedding_output:
-            embedding_output = embedding_output[0]
-
-            if not isinstance(embedding_output, torch.Tensor):
-                embedding_output = embedding_output[0]
-                
-            # Remove nearest_16 padding
-            return embedding_output[:, :tokens.shape[1], :].float().cpu()
+        outputs, embeddings = self.model(tokens, return_embeddings=True, layer_names=[self.layer_name])
+        embeddings = embeddings[self.layer_name]
+        return embeddings[:, :tokens.shape[1], :].float().cpu()
 
     @staticmethod
     def _offsets_to_indices(offsets, seqs):

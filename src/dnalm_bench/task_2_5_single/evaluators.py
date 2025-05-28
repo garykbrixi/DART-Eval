@@ -9,14 +9,16 @@ from scipy.spatial import distance
 from tqdm import tqdm
 from ..utils import NoModule, onehot_to_chars
 import polars as pl
-from models import load_model
-from .....scoring import score_sequences, logits_to_logprobs, prepare_batch
+# from .....scoring import score_sequences, logits_to_logprobs, prepare_batch
 
 class LikelihoodEvaluator(metaclass=ABCMeta):
     def __init__(self, tokenizer, model, batch_size, num_workers, device):
         self.tokenizer = tokenizer
         self.model = model
-        self.model.to(device)
+        try:
+            self.model.to(device)
+        except:
+            pass
         self.batch_size = batch_size
         self.num_workers = num_workers
         self.device = device
@@ -491,14 +493,23 @@ class NTEvaluator(LikelihoodEvaluator, MaskedZeroShotScore):
 
 class EvoEvaluator(LikelihoodEvaluator, CausalZeroShotScore):
     def __init__(self, model_name, batch_size, num_workers, device):
-        evo_model = load_model(
-            model_name,
-            device=device,
-        )
-        self.tokenizer = evo_model.tokenizer
-        self.model = evo_model.model
-        self.model.to(device)
-        self.model.eval()
+        # evo_model = load_model(
+        #     model_name,
+        #     device=device,
+        # )
+        # self.tokenizer = evo_model.tokenizer
+        # self.model = evo_model.model
+        # self.model.to(device)
+        # self.model.eval()
+        # super().__init__(self.tokenizer, self.model, batch_size, num_workers, device)
+        from evo2 import Evo2
+        evo_model = Evo2(model_name)
+
+        model, tokenizer = evo_model.model, evo_model.tokenizer
+        self.tokenizer = tokenizer
+        self.model = evo_model
+
+        self.layer_name = layer_name
         super().__init__(self.tokenizer, self.model, batch_size, num_workers, device)
 
     @property
@@ -510,36 +521,28 @@ class EvoEvaluator(LikelihoodEvaluator, CausalZeroShotScore):
         return None
 
     def tokenize(self, seqs):
-        # Convert one-hot encoded sequences to string sequences
         seqs_str = onehot_to_chars(seqs)
-        
-        # Use prepare_batch from scoring.py
-        tokens, seq_lengths = prepare_batch(
-            seqs_str, 
-            self.tokenizer, 
-            device=self.device
-        )
-        
-        # Set starts to 0 and ends to sequence lengths
-        starts = torch.zeros(len(seq_lengths), dtype=torch.long)
-        ends = torch.tensor(seq_lengths, dtype=torch.long)
-        
-        # Create attention mask based on sequence lengths
-        attention_mask = torch.zeros_like(tokens, dtype=torch.bool)
-        for i, length in enumerate(seq_lengths):
-            attention_mask[i, :length] = 1
-            
-        return tokens, starts, ends, attention_mask
+        encoded = self.tokenizer.tokenize_batch(seqs_str)
+        tokens = torch.tensor(encoded, dtype=torch.int64)
 
-    def model_fwd(self, tokens_in, attention_mask, tokens_out):
-        with torch.inference_mode():
-            # Get logits from model
-            logits, _ = self.model(tokens_in)  # (batch, length, vocab)
-            
-            # Convert to log probabilities using the same method as scoring.py
-            logprobs = logits_to_logprobs(logits, tokens_out)
-            
-            return logprobs
+        return tokens, None
+
+    def model_fwd(self, tokens):
+        # Check if tokens is a list and convert to tensor
+        if isinstance(tokens, list):
+            tokens = torch.nn.utils.rnn.pad_sequence(
+                [torch.tensor(seq) for seq in tokens], 
+                batch_first=True
+            )
+
+        tokens = tokens.to(device=self.device)
+
+        # List to hold the extracted embeddings
+        embedding_output = []
+
+        outputs, embeddings = self.model(tokens, return_embeddings=True, layer_names=[self.layer_name])
+        embeddings = embeddings[self.layer_name]
+        return embeddings[:, :tokens.shape[1], :].float().cpu()
 
     def score(self, tokens, starts, ends, attention_mask):
         tokens = tokens.to(device=self.device)
@@ -547,7 +550,7 @@ class EvoEvaluator(LikelihoodEvaluator, CausalZeroShotScore):
             attention_mask = attention_mask.to(device=self.device)
         
         # Get log probabilities from model
-        lls = self.model_fwd(tokens, attention_mask, tokens)
+        lls = self.model_fwd(tokens, tokens)
         
         # Create mask for valid positions
         clip_mask = torch.tensor(
@@ -560,37 +563,39 @@ class EvoEvaluator(LikelihoodEvaluator, CausalZeroShotScore):
         out = (lls * clip_mask).sum(1).numpy(force=True)
         return out
 
+    # def tokenize(self, seqs):
+    #     # Convert one-hot encoded sequences to string sequences
+    #     seqs_str = onehot_to_chars(seqs)
+        
+    #     # Use prepare_batch from scoring.py
+    #     tokens, seq_lengths = prepare_batch(
+    #         seqs_str, 
+    #         self.tokenizer, 
+    #         device=self.device
+    #     )
+        
+    #     # Set starts to 0 and ends to sequence lengths
+    #     starts = torch.zeros(len(seq_lengths), dtype=torch.long)
+    #     ends = torch.tensor(seq_lengths, dtype=torch.long)
+        
+    #     # Create attention mask based on sequence lengths
+    #     attention_mask = torch.zeros_like(tokens, dtype=torch.bool)
+    #     for i, length in enumerate(seq_lengths):
+    #         attention_mask[i, :length] = 1
+            
+    #     return tokens, starts, ends, attention_mask
 
-# class EvoEvaluator(LikelihoodEvaluator, CausalZeroShotScore):
-#     def __init__(self, model_name, batch_size, num_workers, device):
-#         evo_model = load_model(
-#             model_name,
-#             device=device,
-#             )
+    # def model_fwd(self, tokens_in, attention_mask, tokens_out):
+    #     with torch.inference_mode():
+    #         # Get logits from model
+    #         logits, _ = self.model(tokens_in)  # (batch, length, vocab)
+            
+    #         # Convert to log probabilities using the same method as scoring.py
+    #         logprobs = logits_to_logprobs(logits, tokens_out)
+            
+    #         return logprobs
 
-#         model, tokenizer = evo_model.model, evo_model.tokenizer
-#         model.eval()
-#         super().__init__(tokenizer, model, batch_size, num_workers, device)
 
-#     @property
-#     def start_token(self):
-#         pass
-    
-#     @property
-#     def end_token(self):
-#         pass
-    
-#     def evaluate(self, dataset, output_file, progress_bar=True):
-#         out_file_obj = open(output_file, "w")
-#         dataloader = DataLoader(dataset, batch_size=self.batch_size, shuffle=False, num_workers=self.num_workers)
-#         for seqs in tqdm(dataloader, disable=(not progress_bar), ncols=120):
-#             seqs_str = onehot_to_chars(seqs)
-#             lls = np.array(score_sequences(seqs_str, self.model, self.tokenizer, reduce_method='sum'))
-#             for lhood in lls.flatten():
-#                 out_file_obj.write(f"{str(lhood)}\n")
-#                 out_file_obj.flush()
-
-    
 class DNABERT2VariantEvaluator(VariantLikelihoodEvaluator):
     _hidden_states = "last"
     def __init__(self, tokenizer, model, batch_size, num_workers, device):
@@ -1116,19 +1121,23 @@ class CaduceusVariantEmbeddingEvaluator(VariantEmbeddingEvaluator):
 
 class EvoVariantEmbeddingEvaluator(VariantEmbeddingEvaluator):
     _hidden_states = "all"
-
     def __init__(self, model_name, layer_name, batch_size, num_workers, device):
-        evo_model = load_model(
-            model_name,
-            device=device,
-        )
-        self.tokenizer = evo_model.tokenizer
-        self.model = evo_model.model
-        self.model.to(device)
-        self.model.eval()
-        # Specify the transformer layer to extract embeddings from
+        from evo2 import Evo2
+        evo_model = Evo2(model_name)
+
+        model, tokenizer = evo_model.model, evo_model.tokenizer
+        self.tokenizer = tokenizer
+        self.model = evo_model
+
         self.layer_name = layer_name
         super().__init__(self.tokenizer, self.model, batch_size, num_workers, device)
+    
+    def tokenize(self, seqs):
+        seqs_str = onehot_to_chars(seqs)
+        encoded = self.tokenizer.tokenize_batch(seqs_str)
+        tokens = torch.tensor(encoded, dtype=torch.int64)
+
+        return tokens, None
 
     @property
     def start_token(self):
@@ -1137,6 +1146,30 @@ class EvoVariantEmbeddingEvaluator(VariantEmbeddingEvaluator):
     @property
     def end_token(self):
         return None
+
+    def tokenize(self, seqs):
+        seqs_str = onehot_to_chars(seqs)
+        encoded = self.tokenizer.tokenize_batch(seqs_str)
+        tokens = torch.tensor(encoded, dtype=torch.int64)
+
+        return tokens, None
+
+    def model_fwd(self, tokens):
+        # Check if tokens is a list and convert to tensor
+        if isinstance(tokens, list):
+            tokens = torch.nn.utils.rnn.pad_sequence(
+                [torch.tensor(seq) for seq in tokens], 
+                batch_first=True
+            )
+
+        tokens = tokens.to(device=self.device)
+
+        # List to hold the extracted embeddings
+        embedding_output = []
+
+        outputs, embeddings = self.model(tokens, return_embeddings=True, layer_names=[self.layer_name])
+        embeddings = embeddings[self.layer_name]
+        return embeddings[:, :tokens.shape[1], :].float().cpu()
 
     def tokenize(self, seqs):
         # Convert one-hot encoded sequences to string sequences
@@ -1149,37 +1182,5 @@ class EvoVariantEmbeddingEvaluator(VariantEmbeddingEvaluator):
 
     def embed(self, tokens, starts, ends, attention_mask, seq):
         tokens = tokens.to(device=self.device)
-        
-        # List to store embeddings
-        embedding_output = []
 
-        def hook_fn(module, input, output):
-            # For transformer models, output is typically a tuple
-            # We want the hidden states/embeddings
-            if isinstance(output, tuple):
-                embedding_output.append(output[0])
-            else:
-                embedding_output.append(output)
-
-        # Get the transformer layer
-        transformer_layer = self.model.get_submodule(self.layer_name)
-        
-        # Register the hook
-        handle = transformer_layer.register_forward_hook(hook_fn)
-        
-        try:
-            with torch.no_grad():
-                # Forward pass
-                self.model(tokens)
-                
-                # Get embeddings from hook
-                embeddings = embedding_output[0]
-                
-                # Convert to float32 before taking mean and converting to numpy
-                embeddings = embeddings.float()
-                embeddings = embeddings.mean(dim=1)
-                
-                return embeddings.cpu().numpy()
-        finally:
-            # Always remove the hook
-            handle.remove()
+        return torch.mean(self.model_fwd(tokens), dim=1)

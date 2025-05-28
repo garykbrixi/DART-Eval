@@ -9,15 +9,9 @@ from transformers import AutoTokenizer, AutoModelForMaskedLM, AutoModel, AutoMod
 from scipy.stats import wilcoxon
 from tqdm import tqdm
 import h5py
-<<<<<<< HEAD
-from ..embeddings import EmbeddingExtractor, HFEmbeddingExtractor, SequenceBaselineEmbeddingExtractor
-from ..utils import onehot_to_chars, NoModule
-from .....models import load_model
-=======
-from ..embeddings import HFEmbeddingExtractor, SequenceBaselineEmbeddingExtractor
-from ..utils import onehot_to_chars, NoModule
->>>>>>> upstream/main
 
+from ..embeddings import HFEmbeddingExtractor, SequenceBaselineEmbeddingExtractor, EmbeddingExtractor
+from ..utils import onehot_to_chars, NoModule
 
 
 class SimpleEmbeddingExtractor:
@@ -259,15 +253,12 @@ class Evo2EmbeddingExtractor(EmbeddingExtractor, SimpleEmbeddingExtractor):
     _idx_mode = "fixed"
 
     def __init__(self, model_name, layer_name, batch_size, num_workers, device):
-        evo_model = load_model(
-            model_name,
-            device=device,
-            )
+        from evo2 import Evo2
+        evo_model = Evo2(model_name)
+
         model, tokenizer = evo_model.model, evo_model.tokenizer
         self.tokenizer = tokenizer
-        self.model = model
-        self.model.to(device)
-        model.eval()
+        self.model = evo_model
 
         self.layer_name = layer_name
 
@@ -295,52 +286,33 @@ class Evo2EmbeddingExtractor(EmbeddingExtractor, SimpleEmbeddingExtractor):
         # List to hold the extracted embeddings
         embedding_output = []
 
-        def get_embedding_output(module, input, output):
-            embedding_output.append(output)
-
-        # Register the forward hook for the specified layer
-        layer_to_hook = self.model.get_submodule(self.layer_name)
-
-        with layer_to_hook.register_forward_hook(get_embedding_output) as handle:
-            # Pass through the model without computing gradients
-            with torch.no_grad():
-                self.model(tokens)
-
-        # Check if embeddings were captured
-        if embedding_output:
-            embedding_output = embedding_output[0]
-
-            if not isinstance(embedding_output, torch.Tensor):
-                embedding_output = embedding_output[0]
-                
-            # Remove nearest_16 padding
-            return embedding_output[:, :tokens.shape[1], :].float().cpu()
+        outputs, embeddings = self.model(tokens, return_embeddings=True, layer_names=[self.layer_name])
+        embeddings = embeddings[self.layer_name]
+        return embeddings[:, :tokens.shape[1], :].float().cpu()
 
     @staticmethod
     def _offsets_to_indices(offsets, seqs):
-        slice_idx = [0, seqs.shape[1] - 1] # do other embeddings add an end token?
+        slice_idx = [0, seqs.shape[1]]
         
         return np.array(slice_idx)
-    
 
-class Evo2VariantEmbeddingExtractor(EmbeddingExtractor, HFVariantEmbeddingExtractor):
+
+class Evo2VariantEmbeddingExtractor(HFVariantEmbeddingExtractor):
     _idx_mode = "fixed"
 
     def __init__(self, model_name, layer_name, batch_size, num_workers, device):
-        evo_model = load_model(
-            model_name,
-            device=device,
-        )
+        from evo2 import Evo2
+        evo_model = Evo2(model_name)
+
         model, tokenizer = evo_model.model, evo_model.tokenizer
         self.tokenizer = tokenizer
-        self.model = model
-        self.model.to(device)
-        model.eval()
+        self.model = evo_model
 
         self.layer_name = layer_name
 
-        EmbeddingExtractor.__init__(self, batch_size, num_workers, device)
+        super().__init__(batch_size, num_workers, device)
 
+    
     def tokenize(self, seqs):
         seqs_str = onehot_to_chars(seqs)
         encoded = self.tokenizer.tokenize_batch(seqs_str)
@@ -348,7 +320,9 @@ class Evo2VariantEmbeddingExtractor(EmbeddingExtractor, HFVariantEmbeddingExtrac
 
         return tokens, None
 
+
     def model_fwd(self, tokens):
+        # Check if tokens is a list and convert to tensor
         if isinstance(tokens, list):
             tokens = torch.nn.utils.rnn.pad_sequence(
                 [torch.tensor(seq) for seq in tokens], 
@@ -356,29 +330,20 @@ class Evo2VariantEmbeddingExtractor(EmbeddingExtractor, HFVariantEmbeddingExtrac
             )
 
         tokens = tokens.to(device=self.device)
+
+        # List to hold the extracted embeddings
         embedding_output = []
 
-        def get_embedding_output(module, input, output):
-            embedding_output.append(output)
-
-        layer_to_hook = self.model.get_submodule(self.layer_name)
-
-        with layer_to_hook.register_forward_hook(get_embedding_output) as handle:
-            with torch.no_grad():
-                self.model(tokens)
-
-        if embedding_output:
-            embedding_output = embedding_output[0]
-
-            if not isinstance(embedding_output, torch.Tensor):
-                embedding_output = embedding_output[0]
-                
-            return embedding_output[:, :tokens.shape[1], :].float().cpu()
+        outputs, embeddings = self.model(tokens, return_embeddings=True, layer_names=[self.layer_name])
+        embeddings = embeddings[self.layer_name]
+        return embeddings[:, :tokens.shape[1], :].float().cpu()
 
     @staticmethod
     def _offsets_to_indices(offsets, seqs):
-        slice_idx = [0, seqs.shape[1] - 1]
+        slice_idx = [0, seqs.shape[1]]
+        
         return np.array(slice_idx)
+
 
 
 class DNABERT2VariantEmbeddingExtractor(HFVariantEmbeddingExtractor):

@@ -7,11 +7,13 @@ from ....components import FootprintingDataset
 root_output_dir = os.environ.get("DART_WORK_DIR", "")
 
 if __name__ == "__main__":
-    model_name = "evo2_cascade_1p5_7b_458k"
-    layer_name = "35.norm"
+    # model_name = "evo2_cascade_1p5_7b_458k"
+    model_name = "evo2_7b_base"
+    # layer_name = "35.norm"
+    layer_name = "blocks.28.mlp.l3"
     # layer_name = "6.attention.dense"
     seq_table = os.path.join(root_output_dir,"task_2_footprinting/processed_data/footprint_dataset_350_v1.txt")
-    batch_size = 512
+    batch_size = 64
     num_workers = 0
     seed = 0
     device = "cuda:0"
